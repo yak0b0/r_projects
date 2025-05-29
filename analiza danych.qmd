@@ -1,0 +1,250 @@
+---
+title: "Analiza wieku studentow i wynikow na egzaminie"
+subtitle: "Doskonalenie umiejętności w środowisku RStudio"
+author:
+  - name: Jakub Żołdak
+    affiliation: Super Sigmy
+    email: s104627@edu.pollub.pl
+date: "2025-05-23"
+format: 
+  html:
+    lang: pl
+    self-contained: true
+    toc: false
+    theme: united
+editor: visual
+code-fold: true
+code-copy: hover
+editor_options: 
+  chunk_output_type: console
+---
+
+# Wstęp
+
+Celem tego projektu jest zbadanie różnych parametrów studentów i tego jak rzutają one na wyniki na egzaminie. W szczególności przeanalizujemy dane dotyczące ich nawyków związanych ze stylem życia, takich jak liczba godzin spędzonych na nauce, korzystanie z mediów społecznościowych, jakość snu oraz poziom aktywności fizycznej. Dzięki danym zawartym w pliku `student_habits_performance.csv` oraz narzędziom dostępnym w RStudio, przeprowadzimy szczegółową analizę statystyczną, pozwalającą określić wpływ tych czynników na wyniki egzaminacyjne. Wyniki badań mogą dostarczyć istotnych wskazówek dotyczących efektywnego zarządzania czasem i metod nauki sprzyjających sukcesowi akademickiemu.
+
+```{r konfiguracja srodowiska}
+#| eval: false
+#| warning: false
+#| include: false
+setwd('C:/Users/burne/Desktop/Uczelnia/Programowanie_w_R/lab_10')
+library(tidyverse)
+library(ggplot2)
+library(ggcorrplot)
+library(patchwork)
+```
+
+## Wczytwyanie i poprawienie typów danych
+
+Będziemy dokonywać analizy na podstawie pliku `student_habits_performance.csv` który można pobrać z [kaggle.com](https://www.kaggle.com/datasets/jayaantanaath/student-habits-vs-academic-performance) (Kaggle to popularna platforma dla entuzjastów data science w której użytkownicy mogą między innymi pobierać zestawy danych).
+
+```{r wczytanie zbioru danych}
+#| message: false
+#| warning: false
+library(tidyverse)
+library(ggplot2)
+students <- read.csv(file = './student_habits_performance.csv')
+```
+
+Dobrą praktyką jest rozpoczęcie analizy od podstawowych statystyk opisowych. Pozwala to na szybką inspekcję nieprawidłowości w danych oraz identyfikację potencjalnych błędów, takich jak brakujące wartości czy nietypowe obserwacje.
+
+Na początku sprawdzimy czy nasz zbiór danych jest całkowity (nie ma w nim żadnych `NA`) oraz czy kolumny mają odpowiedni typ zmiennych.
+
+```{r wyswietlenie + sprawdzenie NA}
+glimpse(students)
+colSums(is.na(students))
+```
+
+Zauważmy, że niektóre kolumny takie jak `part_time_job` czy `internet_quality` są rodzaju `character` mimo, że wygodniej by było gdyby były rodzaju `factor`. Użyjemy do tego funkcji `mutate()`:
+
+```{r modyfikacja struktury + wyswietlenie}
+students %>% 
+  mutate(gender = as.factor(gender),
+         part_time_job = as.factor(part_time_job),
+         diet_quality = as.factor(diet_quality),
+         parental_education_level = as.factor(parental_education_level),
+         internet_quality = as.factor(internet_quality),
+         extracurricular_participation = as.factor(extracurricular_participation)) -> students
+glimpse(students)
+
+```
+
+Zamiana rodzaju zmiennej na `factor` ułatwi nam późniejszą analizę tych danych i wizualizację wyników.
+
+Wykorzystanie funkcji `summary()` z funckją do mapowania `apply()` w RStudio umożliwi nam wygodne podsumowanie zbioru danych i lepsze zrozumienie jego struktury.
+
+```{r apply summary}
+apply(students, MARGIN = 2, FUN = summary)
+
+```
+
+# Analiza zależności
+
+Analiza zależności pozwoli nam zidentyfikować wpływ różnych czynników na wyniki egzaminacyjne studentów. Skupimy się na wykryciu istotnych korelacji między zmiennymi, co umożliwi lepsze zrozumienie mechanizmów wpływających na lepszy `exam_score`.
+
+## Analiza macierzy koleracji
+
+Macierz korelacji to tabela, która przedstawia współczynniki korelacji między różnymi zmiennymi w zbiorze danych. Pozwala ona zidentyfikować zależności między cechami, np. czy większa liczba godzin nauki wiąże się z lepszymi wynikami na egzaminie. Wartości korelacji mieszczą się w zakresie od -1 do 1, gdzie:
+
+-   1 oznacza **silną dodatnią zależność**,
+-   -1 oznacza **silną ujemną zależność**,
+-   0 oznacza **brak zależności**.
+
+```{r}
+#| label: macierz-korelacji
+#| tbl-cap: "Macierz korelacji między zmiennymi"
+#| warning: false
+students %>%
+  select_if(is.numeric)%>%
+  cor()%>%
+  ggcorrplot::ggcorrplot(type = 'lower',
+                         method = 'square',
+                         lab = T, 
+                         lab_size = 2.5,
+                         colors = c("red","orange","green"),
+                         title = "Macierz korelacji zbioru students",
+                         ggtheme = ggplot2::theme_classic())
+```
+
+Na macierzy koleracji dotyczącej naszego zbioru danych `students` możemy zauważyć, że :
+
+* Silna korelacja ( 0.83 między `study_hours_per_day` a `exam_score`) sugeruje, że im więcej czasu student poświęca na naukę, tym lepsze osiąga wyniki.
+* Słaba korelacja ( -0.17 między `netflix_hours` a `exam_score`) może wskazywać, że zwiększona ilość czasu spędzanego na rozrywce wpływa negatywnie na wyniki egzaminacyjne.
+
+Zobaczmy czy te koleracje faktycznie wychodzą podczas wizualizacji danych
+
+## Czy istnieje korelacja między liczbą godzin nauki dziennie (`study_hours_per_day`) a wynikiem egzaminu (`exam_score`)
+
+W naszej macierzy koleracji wartość koleracji między `study_hours_per_day` a `exam_score` wynosił 0.83. Zobaczymy czy faktycznie tak jest. Sprawdźimy to za pomocą wykresu puntkowego z pakietu `ggplot2`:
+
+```{r study_hours + exam}
+#| message: false
+#| warning: false
+
+
+ggplot(students,aes(x = study_hours_per_day, y = exam_score,))+
+  geom_point()+
+  geom_smooth()+
+  theme_classic()+
+  labs(x = "Study hours per day", y = "Exam score", title = "Exam score by hours of studying")
+```
+
+Na podstawie powyższego wykresu punktowego i macierzy koleracji przedstawionej powyżej, jednoznacznie stwierdzamy, że **im więcej nauki, tym lepsze wyniki**
+
+## Czy istnieje koleracja między ilością czasu spędzonym na internecie (`netflix_hours` + `social_media_hours`) a wynikiem egzaminiu (`exam_score`)
+
+W naszej macierzy koleracji wartość koleracji między `netflix_hours` a `exam_score` wynosił -0.17.
+
+Taki sam wynik (-0.17) jest między `social_media_hours` a `exam_score`, dlatego możemy postawić tezę "Czy istenieje koleracja między czasem spędzonym na internecie a wynikiem egzaminu".
+
+Najpierw musimy utworzyć nową kolumnę (`internet_hours_per_day`) która będzie sumą `netflix_hours` i `social_media_hours`. Następnie podzielimy tą kolumnę na następujące poziomy:
+
+* `Low` - niska ilość czasu spędzona w internecie,
+* `Normal` - normalna ilość czasu spędzona w internecie,
+* `High` - wysoka ilość czasu spędzona w internoście,
+* `Very High` - podchodząca pod uzależnienie, ilość czasu spędzona w internecie,
+
+Potem porównamy to z wynikiem na egzaminie. Sprawdźimy to za pomocą wykresu puntkowego z pakietu `ggplot2`:
+
+```{r interne_hours}
+
+students <- students %>% 
+  mutate(internet_hours_per_day = social_media_hours + netflix_hours)
+
+summary(students$internet_hours_per_day)
+
+students$internet_hours_per_day <- cut(students$internet_hours_per_day, breaks = c(0,4,6.5,8.5,11), labels = c("Low","Normal","High","Very High"), include.lowest = T)
+
+students_score_by_internet <- students %>% 
+  group_by(internet_hours_per_day) %>% 
+  summarise(avg_exam = mean(exam_score))
+
+ggplot(students_score_by_internet,aes(x = internet_hours_per_day, y = avg_exam, fill = internet_hours_per_day))+
+  geom_col()+
+  theme_classic()+
+  labs(title = "Exam score by amount of hours on the internet", x = "Amount of hours on the internet per day", y = "Average exam score", fill = "")+
+   annotate("text", x = 1, y = max(students_score_by_internet$avg_exam) + 2, label = "0 - 4h", size = 3, color = "black") +
+  annotate("text", x = 2, y = max(students_score_by_internet$avg_exam) -5, label = "4 - 6.5h", size = 3, color = "black") +
+  annotate("text", x = 3, y = max(students_score_by_internet$avg_exam) - 6.6, label = " 6.5 - 8.5h", size = 3, color = "black") +
+  annotate("text", x = 4, y = max(students_score_by_internet$avg_exam) - 15.8, label = "8.5 - 11h", size = 3, color = "black")
+
+## tutaj funkcje annotate() znalazlem za pomoca copilota i bardzo fajne rozwiazanie
+```
+
+Na powyższym wykresie słupkowym widzimy zależność między ilością czasu spędzonym na internecie `internet_hours_per_day` a uśrednionym wyniku na egzaminie `avg_exam`. Możemy stwierdzić, że osoby które spędzają **mniej** niż 4 godziny dziennie na internecie, mają **wyższe** wyniki na egzaminie, niż osoby które spędzają na internecie więcej niż 4 godziny dziennie.
+
+## Czy kobiety mają lepsze oceny od mężczyzn?
+
+Często między mężczyznami a kobietami istnieje różnica jeżeli chodzi o osiągnięcia w nauce, czy tak samo będzie w tym przypadku?
+
+Poniżej mamy dwa wykresy jeden słupkowy (`geom_col()`), a drugi liniowy (`geom_density()`).
+
+```{r słupek + liniowy}
+
+scores_by_gender <- students %>%
+  group_by(gender) %>%
+  summarise(avg_grade = mean(exam_score))
+
+ggplot(scores_by_gender, aes(x = gender, y = avg_grade, fill = gender)) +
+  geom_col() +
+  labs(title = "Average exam score by gender",
+       x = "Gender",
+       y = "Average exam score",
+       fill = "Gender") +
+  theme_classic()
+
+
+ggplot(students)+
+  geom_density(aes(x = exam_score, fill = gender), alpha = 0.3)+
+  theme_classic()+
+  labs(title = "Distribution of exam scores by gender",x = "Exam score", y = "Density", fill = "Gender")
+```
+
+Na podstawie wykresów widzimy, że nie istnieje koleracja między płcią a wynikiem na egzaminie.
+
+
+## Czy osoby spędzające więcej czasu w mediach społecznościowych (`social_media_hours`) mają gorsze zdrowie psychiczne
+
+Sprawdzmy czy osoby które spędzają więcej czasu w mediach społecznościowych `social_media_hours` mają gorsze zdrowie psychiczne `mental_health_rating` niż osoby które spędzają mniej czasu w mediach społecznościowych.
+
+```{r brak koleracji}
+
+
+students$social_media_class <-  cut(students$social_media_hours, breaks = c(0,2,4,9), labels = c('Low',
+                                                                                                'Moderate',
+                                                                                                'High'), include.lowest = T)
+
+mh_means <- students %>%
+  group_by(social_media_class) %>%
+  summarize(mean_mental_health_rating = mean(mental_health_rating))
+
+
+ggplot(mh_means)+
+  geom_col(aes(x = social_media_class, y = mean_mental_health_rating, fill = social_media_class))+
+  theme_classic()+
+  labs(title = "Mental health rating by social media hours", x = "Social media hours per day", y = "Average mental health rating", fill = "Social media amount")+
+annotate("text", x = 1, y = max(mh_means$mean_mental_health_rating) +0.15, label = "0 - 2h", size = 3, color = "black")+
+  annotate("text", x = 2, y = max(mh_means$mean_mental_health_rating), label = "2 - 4h", size = 3, color = "black")+
+  annotate("text", x = 3, y = max(mh_means$mean_mental_health_rating)+ 0.13, label = "4 - 9h", size = 3, color = "black")
+  
+```
+
+Jak widzimy nie ma żadnej koleracji między ilością spędzonego czasu dziennie na mediach społecznościowych a stanem zdrowia psychicznego.
+
+# Zakończenie i wnioski
+
+Nasza analiza danych dotyczących studentów pozwoliła na identyfikację kilku istotnych zależności.
+
+Wyniki wykazały, że *czas poświęcony na naukę* ma wyraźną korelację z *wynikami egzaminacyjnymi* – studenci spędzający więcej godzin na nauce zazwyczaj osiągają lepsze rezultaty.
+
+Z kolei *nadmierne korzystanie z internetu*, w tym *mediów społecznościowych* i netflixa, może negatywnie wpływać na wyniki na egzaminie.
+
+Zastosowanie `RStudio` umożliwiło nam efektywne przetwarzanie danych, weryfikację ich jakości oraz przeprowadzenie analiz statystycznych. Poprawienie typów danych pozwoliła na lepsze zrozumienie zbioru danych i eliminację potencjalnych nieprawidłowości.
+
+Podsumowując, nasze badanie dostarcza cennych wskazówek dla studentów, które mogą pomóc w optymalizacji wyników w nauce.
+
+Warto dążyć do zrównoważonego stylu życia, łączącego odpowiednią ilość nauki, sen, aktywność fizyczną i kontrolowane korzystanie z internetu, aby zwiększyć szanse na sukces.
+
+
+
+![Człowiek sukcesu](https://www.mentordiscoverinspire.org/wp-content/uploads/2017/03/successfulman-1080x550-1.png)
