@@ -62,4 +62,4 @@ install.packages(c("tidyverse", "gganimate", "gifski", "magick", "knitr", "ggrep
 The analysis highlights how offensive efficiency and two-point scoring are central to modern NCAA success, while elite three-point shooting plays a less consistent role than in the professional game. Over time, college basketball has seen greater parity, with fewer persistently struggling programs and more competitive balance across conferences.
 
 🔗 Author: Jakub Zoldak
-📧 Contact: [GitHub Profile Link](github.com/yak0b0)
+📧 Contact: [GitHub Profile Link](https://www.github.com/yak0b0)
