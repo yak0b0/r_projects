@@ -48,8 +48,8 @@ The project includes:
 Clone the repo and open the R project in RStudio:  
 
 ```{bash}
-git clone https://github.com/yourusername/ncaa-basketball-eda.git
-cd ncaa-basketball-eda
+git clone https://github.com/yak0b0/r_projects.git
+cd r_projects
 ```
 
 ## Install required R packages:
