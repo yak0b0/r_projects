@@ -1,7 +1,7 @@
 # Uncovering Patterns in NCAA Basketball Team Statistics  
 ### An Exploratory Data Analysis (2013–2021)
 
-![NCAA Basketball](https://upload.wikimedia.org/wikipedia/commons/thumb/3/3d/NCAA_logo.svg/320px-NCAA_logo.svg.png)
+![NCAA Basketball](https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/NCAA_logo.svg/1200px-NCAA_logo.svg.png)
 
 ## 📌 Project Overview
 This project explores performance metrics of NCAA basketball teams between **2013 and 2021** (excluding 2020 due to COVID-19’s impact on postseason play). Using the dataset from Kaggle, the analysis investigates what distinguishes **successful teams from underperformers**, highlights **statistical anomalies**, and examines **trends across seasons**.  
