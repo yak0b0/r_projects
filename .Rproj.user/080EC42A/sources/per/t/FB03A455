@@ -1,0 +1,31 @@
+{
+    "id": "FB03A455",
+    "path": "C:/Users/Kuba/Desktop/schule/rstudio/first_eda_attempt/eda.qmd",
+    "project_path": "eda.qmd",
+    "type": "quarto_markdown",
+    "hash": "698450069",
+    "contents": "",
+    "dirty": false,
+    "created": 1754172546107.0,
+    "source_on_save": false,
+    "relative_order": 1,
+    "properties": {
+        "rmdVisualMode": "false",
+        "rmdVisualWrapConfigured": "true",
+        "tempName": "Untitled1",
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "37,0",
+        "scrollLine": "13",
+        "docOutlineVisible": "1",
+        "rmdVisualCollapsedChunks": ""
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1754173766,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1754173766248,
+    "read_only": false,
+    "read_only_alternatives": []
+}

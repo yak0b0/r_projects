@@ -1,0 +1,38 @@
+---
+title: "Uncovering Patterns in NCAA Basketball Team Statistics"
+author: "Jakub Zoldak"
+format: html
+editor: visual
+---
+
+
+## Introduction
+
+The dataset that I will be taking a look at contains detailed statistics about NCAA basketball teams, from the years 2013 - 2025 (excluding 2020, when COVID-19 restricted postseason play).
+
+I will be trying to find patterns, that might occur in winning/losing teams (identifying those teams), detecting anomalies (teams that have absurdly high/low stats in certain cafeterias) and overall looking in depth at this dataset.
+
+I found my dataset on kaggle.com, you can also access it via this link:
+
+- https://www.kaggle.com/datasets/andrewsundberg/college-basketball-dataset
+
+## Loading in our dataset + adding packages in R
+
+I downloaded the dataset as a compressed zip from kaggle and then extracted `cbb.csv` which contains combined data from all 11 seasons.
+
+```{r} 
+data <- read.csv("cbb.csv")
+```
+
+I then decided to load in all packages that I will use during this EDA. (For now just tidyverse)
+
+```{r}
+#| label: packages
+#| message: false
+#| warning: false
+#| include: false
+library(tidyverse)
+```
+
+## Look at the data and clean it
+
