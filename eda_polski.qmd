@@ -1,0 +1,528 @@
+---
+title: "Analiza wzorców w statystykach drużyn NCAA"
+author:
+  - name: Jakub Żołdak
+    affiliation: Politechnika Lubelska
+    email: s104627@pollub.edu.pl
+date: "2026-01-16"
+editor: visual
+editor_options: 
+  chunk_output_type: console
+format:
+  html:
+    lang: pl
+    smooth-scroll: true
+    toc: true
+    self-contained: true
+    toc-depth: 5
+    toc-location: left
+    toc-expand: 2
+    toc-title: "*Spis treści*"
+    theme: cosmo
+execute:
+  echo: false
+  warning: false
+  message: false
+bibliography: work.bib
+---
+
+# Wstęp
+
+## Research motivation (dlaczego wybrałem taki obszar badań)
+
+Celem tego projektu jest zbadanie wskaźników wydajności drużyn koszykarskich NCAA w latach 2013–2024. Wybór tego tematu wynika z chęci zrozumienia, jakie czynniki statystyczne odróżniają drużyny odnoszące sukcesy od tych, które radzą sobie gorzej. Wynika rónież z mojego zainteresowania koszykówką :)
+
+## Temat projektu
+
+Tematem projektu jest eksploracyjna analiza danych (EDA) zestawu danych NCAA o koszykówce. NCAA to skrót oznaczający National Collegiate Athletic Association Będę, i będziemy analizować najwyższą dywizję (ligę) czyli D1.  Będę starał się znaleźć wzorce występujące w drużynach wygrywających i przegrywających oraz ogólnie przyjrzeć się temu zbiorowi danych.
+
+![Drabinka turnieju March Madness z 2025 roku w którym udział wzięło 68 z 255 możliwych drużyn](https://www.ncaa.com/_flysystem/public-s3/styles/large_16x9/public-s3/images/2025-04/2025-ncaa-tournament-bracket-march-madness-final_00001.jpg?h=1bb9edb9&itok=bMiHK1Ng)
+
+## Pytania badawcze
+
+Na podstawie dostępnych danych postawiłem następujące pytania badawcze:
+
+1.  **Które statystyki wykazują najsilniejszą korelację z liczbą wygranych meczów (`W`)?**
+
+2.  **Jak skuteczność rzutów (za 2 i za 3 punkty) wpływa na sukces drużyny i jak zmienia się to w czasie?**
+
+3.  **Czym charakteryzują się "drużyny zwycięskie" (powyżej określonego progu zwycięstw) i które programy utrzymują ten status na przestrzenii lat**
+
+
+## Na podstawie czego będziemy działać
+
+Analiza opiera się na zbiorze danych znalezionym na [kaggle.com](https://www.kaggle.com/datasets/andrewsundberg/college-basketball-dataset), zawartym w pliku `cbb.csv`. Warto również przeczytać następujące prace @conte2016ncaa i @esteves2018travel gdzie również autorzy przyglądają się drużynom koszykarskim z NCAA, tylko, że pod trochę innym kątem.
+
+
+```{r}
+#| label: packages
+#| message: false
+#| warning: false
+#| include: false
+library(tidyverse)
+library(gganimate)
+library(gifski)
+library(magick)
+library(knitr)
+library(gt)
+library(DT)
+library(ggrepel)
+library(tidygeocoder)
+library(sf)
+library(leaflet)
+library(rnaturalearth)
+library(rnaturalearthdata)
+
+data <- read.csv("cbb.csv")
+data <- data %>%
+  mutate(POSTSEASON_NUM = case_when(
+    POSTSEASON == "Champions" ~ 1,
+    POSTSEASON == "2ND"       ~ 2,
+    POSTSEASON == "F4"        ~ 4,
+    POSTSEASON == "E8"        ~ 8,
+    POSTSEASON == "S16"       ~ 16,
+    POSTSEASON == "R32"       ~ 32,
+    POSTSEASON == "R64"       ~ 64,
+    POSTSEASON == "R68"       ~ 68,
+    POSTSEASON == "N/A"       ~ 400,
+  ))
+data <- data %>%
+  mutate(POSTSEASON = replace_na(POSTSEASON, "N/A"),
+         SEED = replace_na(SEED, "N/A"))
+data <- data %>% 
+  mutate(WIN_P = W/G)
+Sys.setenv(GOOGLEGEOCODE_API_KEY = "AIzaSyBaxOaWA7mXBqjWBZ_ohy2gvpcIU9G-OWI")
+```
+
+
+## Podgląd zbioru danych
+
+```{r}
+#| label: view_data
+data %>% 
+  datatable()
+
+```
+
+## Jakie zmienne zawiera nasz zbiór?
+
+Zbiór obejmuje kluczowe statystyki, takie jak:
+
+-   Ilość wygranych meczów (`W`),
+
+-   Skorygowana efektywność ofensywna (`ADJOE`) i defensywna (`ADJDE`)
+
+-   Procent skuteczności za dwa i trzy (`X2P_O` i `X3P_O`)
+
+-   Procent wygranych meczów w skali sezonu (`WIN_P`)
+
+Dane obejmują sezony 2013-2024 (z wyłączeniem turnieju w 2020 r. w tym roku się nie odbył ze względu na pandemię COVID-19).
+
+
+# Pytanie badawcze 1: Które statystyki wykazują najsilniejszą korelację z liczbą wygranych meczów?
+
+Używamy macierzy korelacji, aby zidentyfikować związki między zmiennymi numerycznymi.
+
+```{r}
+#| label: cor_matri
+#| echo: false
+#| message: false
+#| warning: false
+data %>% 
+  select_if(is.numeric) %>% 
+  cor() %>% 
+  ggcorrplot::ggcorrplot(hc.order = F, type = 'lower',
+                         method = 'square',
+                         lab = T,
+                         lab_size = 2,
+                         colors = c("red","white","green"),
+                         title = "Macierz korelacji",
+                         ggtheme = theme_classic(),
+                         tl.cex = 8,
+                         tl.srt = 45
+                         )
+```
+
+Filtrujemy tylko silne korelacje (\> 0.5) dla lepszej czytelności.
+
+```{r}
+#| label: cor_matrix_stronk
+#| echo: false
+#| message: false
+#| warning: false
+cor_mat <- cor(data %>% select_if(is.numeric))
+
+threshold <- 0.5
+cor_mat[abs(cor_mat) < threshold] <- NA  
+
+ggcorrplot::ggcorrplot(cor_mat,
+                       type = "lower",
+                       method = "square",
+                       lab = TRUE,
+                       lab_size = 2.5,
+                       colors = c("red","white","green"),
+                       title = "Silne korelacje (powyżej 0.5)",
+                       ggtheme = theme_classic())
+```
+
+Interpretacja: Macierz wskazuje na silną korelację (0.73) między `ADJOE` a `W`. Poniższy wykres punktowy to potwierdza – drużyny z wyższym `ADJOE` wygrywają więcej i częściej zachodzą daleko w fazie pucharowej (prawa górna część wykresu).
+
+```{r}
+#| label: adjoe_w_scatter
+ggplot(data, aes(x = W, y = ADJOE, color = factor(POSTSEASON))) +
+  geom_point(alpha = 0.5, size = 2) +
+  geom_smooth(method = "lm", color = "red", se = TRUE) +
+  scale_color_manual(
+    values = c(
+      "N/A" = "#aaaaaa",      # choose your color for N/A
+      "R32" = "#26828e",
+      "S16" = "#1f9e89",
+      "E8"  = "#35b779",
+      "F4"  = "#6ece58",
+      "Champions" = "#fde725",
+      "2ND" = "#b5de2b",
+      "R64" = "#31688e",
+      "R68" = "#3e4a89"
+      
+    )
+  ) +
+  labs(
+    title = "Wykres punktowy: Ilość zwycięstw w zestawieniu z ADJOE",
+    x = "Ilość zwycięstw (W)",
+    y = "Skorygowana efektywność ofensywna (ADJOE)",
+    color = "Pozycja w playoffach"
+  ) +
+  theme_classic()
+```
+
+# Pytanie badawcze 2: Jak skuteczność rzutów wpływa na sukces?
+
+Skuteczność przy rzutach za 2 punkty to zmienna (`X2P_O`)
+
+Korelacja między ilością zwycięstw a skutecznością przy rzutach za 2, w naszej macierzy korelacji, wyszła nam na poziomie 0.55. Przyjmujemy próg 50% jako wyznacznik dobrej skuteczności za 2 jak w tym poście na [quora](https://www.quora.com/In-the-NBA-why-is-shooting-50-from-two-point-range-considered-excellent-but-shooting-33-from-3-point-range-is-considered-substandard-when-both-percentages-equal-one-point-per-shot).
+
+```{r}
+#| label: 2pt_gif
+p <- ggplot(data, aes(x = W, y = X2P_O, color = factor(POSTSEASON))) +
+  geom_point(alpha = 0.7, size = 2)+
+  geom_hline(yintercept = 50, linetype = "dashed", color = "black", size = 1)+
+  scale_color_manual(
+    values = c(
+      "N/A" = "#aaaaaa",    
+      "R32" = "#26828e",
+      "S16" = "#1f9e89",
+      "E8"  = "#35b779",
+      "F4"  = "#6ece58",
+      "Champions" = "#fde725",
+      "2ND" = "#b5de2b",
+      "R64" = "#31688e",
+      "R68" = "#3e4a89"
+      
+    )
+  )+
+  labs(
+    title = "Ilość zwycięstw w porównaniu z X2P_O  ({closest_state})",
+    subtitle = "Sezon: {closest_state}",
+    x = "Ilość zwycięstw (W)",
+    y = "Skuteczność rzutów za 2 (X2P_O)",
+    color = "Pozycja w playoffach"
+  ) +
+  theme_classic() +
+  transition_states(YEAR, transition_length = 2, state_length = 5) +
+  ease_aes('linear')
+
+animate(p,fps = 10, nframes = 200, width = 800, height = 600,units = "px", res = 72, renderer = gifski_renderer())
+# anim_save("wins_vs_ax2p_o.gif")
+```
+
+
+Interpretacja: Drużyny wygrywające zazwyczaj znajdują się powyżej linii 50%.
+
+Poniższy wykres pokazuje, że procent drużyn osiągających ten próg stale rośnie w latach 2015-2019 oraz 2021-2024, co sugeruje wzrost znaczenia efektywności rzutów z bliska.
+
+```{r}
+#| label: druzynowe_2pt
+teams_above_50 <- data %>%
+  group_by(YEAR) %>%
+  summarise(
+    count_above_50 = sum(X2P_O > 50, na.rm = TRUE),
+    total_teams = n(),
+    .groups = "drop"
+  ) %>%
+  mutate(perc_above_50 = (count_above_50 / total_teams) * 100)
+
+# Plot percentage over time
+ggplot(teams_above_50, aes(x = YEAR, y = perc_above_50)) +
+  geom_line(color = "blue", size = 1.2) +
+  geom_point(color = "red", size = 2) +
+  geom_text_repel(aes(label = sprintf("%.1f%%", perc_above_50)), size = 4,nudge_y = 0,nudge_x = -0.8 ,direction = "both") +
+  labs(
+    title = "Procent drużyn która miała skuteczność za 2 > 50% na przestrzeni lat",
+    x = "Sezon (Year)",
+    y = "Procent drużyn (%)"
+  )+ scale_x_continuous(breaks = seq(min(teams_above_50$YEAR),max(teams_above_50$YEAR),by = 1))+
+  theme_classic()
+```
+
+Rzuty za 3 punkty to zmienna (`X3P_O`)
+
+Korelacja która wyszła w naszej macierzy korelacji wcześniej jest słabsza niż przy rzutach za dwa bo wynosi zaledwie (0.42). Przyjmujemy próg 38% dla "elitarnej" skuteczności za 3 (ciekawy wątek odnośnie rzutów za 3 na [reddit](https://www.reddit.com/r/dataisbeautiful/comments/bxu2xv/oc_three_point_shooting_in_the_nba_and_ncaa/)).
+
+```{r}
+#| label: 3pt_gif
+q <- ggplot(data, aes(x = W, y = X3P_O, color = factor(POSTSEASON))) +
+  geom_point(alpha = 0.7, size = 2) +
+  geom_hline(yintercept = 38, linetype = "dashed", color = "black", size = 1)+
+  scale_color_manual(
+    values = c(
+      "N/A" = "#aaaaaa",    
+      "R32" = "#26828e",
+      "S16" = "#1f9e89",
+      "E8"  = "#35b779",
+      "F4"  = "#6ece58",
+      "Champions" = "#fde725",
+      "2ND" = "#b5de2b",
+      "R64" = "#31688e",
+      "R68" = "#3e4a89"
+      
+    )
+  )+
+  labs(
+    title = "Ilość zwycięstw w porównaniu z X3P_O  ({closest_state})",
+    subtitle = "Sezon: {closest_state}",
+    x = "Ilość zwycięstw (W)",
+    y = "Skuteczność rzutów za 3 (X3P_O)",
+    color = "Pozycja w playoffach"
+  ) +
+  theme_classic() +
+  transition_states(YEAR, transition_length = 2, state_length = 5) +
+  ease_aes('linear')
+
+animate(q,fps = 10, nframes = 200, width = 800, height = 600,units = "px", res = 72, renderer = gifski_renderer())
+# anim_save("wins_vs_ax3p_o.gif")
+```
+
+
+Interpretacja: Niewiele drużyn osiąga ten próg, a ich liczba spada na przestrzeni lat, co może wynikać z lepszej defensywy lub zmian w przepisach (odległości linii rzutów za 3).
+
+```{r}
+#| label: druzynowe_3pt
+teams_above_38 <- data %>%
+  group_by(YEAR) %>%
+  summarise(
+    count_above_38 = sum(X3P_O > 38, na.rm = TRUE),
+    total_teams = n(),
+    .groups = "drop"
+  ) %>%
+  mutate(perc_above_38 = (count_above_38 / total_teams) * 100)
+
+ggplot(teams_above_38, aes(x = YEAR, y = perc_above_38)) +
+  geom_line(color = "blue", size = 1.2) +
+  geom_point(color = "red", size = 2) +
+  geom_text_repel(aes(label = sprintf("%.1f%%", perc_above_38)), size = 4,nudge_y = 0,nudge_x = -0.8 ,direction = "both") +
+  labs(
+    title = "Procent drużyn która miała skuteczność za 3 > 38% na przestrzeni lat",
+    x = "Sezon (Year)",
+    y = "Procent drużyn (%)"
+  )+ scale_x_continuous(breaks = seq(min(teams_above_38$YEAR),max(teams_above_38$YEAR),by = 1))+
+  theme_classic()
+```
+
+# Pytanie badawcze 3: Czym charakteryzują się "drużyny zwycięskie"?
+
+Zerknijmy na rozkład zmiennej `WIN_P`:
+
+```{r}
+#| label: rozklad_winp
+qs <- quantile(data$WIN_P, probs = c(0.25, 0.5, 0.75), na.rm = TRUE)
+
+ggplot(data, aes(x = WIN_P)) +
+  geom_histogram(
+    bins = 30,
+    fill = "#FF0066",      # nowy kolor słupków (pomarańczowy)
+    color = "white",
+    alpha = 0.85
+  ) +
+  # dodanie linii kwartylowych
+  geom_vline(xintercept = qs[1], color = "#1f78b4", linetype = "dashed", size = 1) +  # Q1
+  geom_vline(xintercept = qs[3], color = "#1f78b4", linetype = "dashed", size = 1) +  # Q3
+  labs(
+    title = "Rozkład zmiennej Win_P",
+    x = "WIN_P",
+    y = "Liczba obserwacji"
+  ) +
+  theme_classic()
+```
+
+Analiza rozkładu zmiennej `WIN_P` wskazuje, że "dobry sezon" to wynik powyżej 65% (trzeci kwartyl).
+
+Analiza drużyn z `WIN_P` \>= 0.65:
+
+```{r}
+#| label: druzyny_zwycieskie
+top_teams_1 <- data %>% 
+  filter( WIN_P >= 0.65) %>% 
+  filter(WIN_P <= 1)
+
+plot_teams_above_065 <- function(data, y_offset = 0.5, bar_color = "#FF0066", covid_year = 2020, covid_color = "gray50") {
+  top_teams <- data %>%
+    group_by(YEAR) %>%
+    summarise(
+      count_above_065 = sum(WIN_P >= 0.65, na.rm = TRUE),
+      .groups = "drop"
+    )
+  
+  if (!covid_year %in% top_teams$YEAR) {
+    top_teams <- rbind(top_teams, data.frame(YEAR = covid_year, count_above_065 = 0))
+  }
+  
+  top_teams$fill_group <- ifelse(top_teams$YEAR == covid_year, "COVID", "Other")
+  
+  ggplot(top_teams, aes(x = YEAR, y = count_above_065, fill = fill_group)) +
+    geom_col() +
+    geom_text(aes(label = count_above_065), vjust = -0.5, size = 3, color = "black") +
+    labs(title = "Ilość drużyn z procentem wygranych meczów >= 0.65%",
+         x = "Rok",
+         y = "Ilość drużyn",
+         caption = "2020 - 0, z powodu pandemii COVID-19") +
+    scale_x_continuous(breaks = seq(min(top_teams$YEAR), max(top_teams$YEAR), by = 1)) +
+    scale_fill_manual(values = c("COVID" = covid_color, "Other" = bar_color)) +
+    theme_classic() +
+    theme(legend.position = "none")
+}
+
+plot_teams_above_065(data)
+```
+
+Które drużyny są najskutczniejsze w byciu najlepszym? Sprawdzamy, które programy najczęściej pojawiają się w grupie najlepszych.
+
+```{r}
+#| label: nic_waznego
+team_counts_top <- top_teams_1 %>% 
+  group_by(TEAM) %>% 
+  summarise(count = n(),
+            avg_postseason_finish = mean(POSTSEASON_NUM, na.rm = TRUE))
+
+top_10_by_count <- team_counts_top %>% 
+  arrange(desc(count)) %>% 
+  head(10)
+
+count_summary <- team_counts_top %>%
+  group_by(count) %>%
+  summarise(n_teams = n(), .groups = "drop")
+```
+
+Wykres najlepszych 10 drużyn uwzględniając powtarzalność wyniku, czyli średnią pozycję w playoffach na przestrzeni lat.
+
+```{r}
+#| label: top_10_programow
+ggplot(top_10_by_count, aes(x = reorder(TEAM, avg_postseason_finish, decreasing = TRUE), y = avg_postseason_finish, fill = avg_postseason_finish))+
+  geom_col()+
+  geom_text(aes(label = round(avg_postseason_finish, 0)), vjust = -0.5, size = 3, color = "black") +
+  scale_fill_gradient(low = "green", high = "red") +
+  theme_classic() +
+  labs(title = "Średnia pozycja na której drużyna zakończyła sezon", x = "Drużyna", y = "Średnia pozycja drużyny")+
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 7, color = "black"),
+    legend.position = "none"
+  )
+```
+
+Po wybraniu drużyn z `WIN_P` \>= 0.65 i analizie ich wyników postseason:
+
+- w czołówce znajdują się takie programy jak Gonzaga, Duke, North Carolina,
+
+- zaskakująco wysoko plasuje się Belmont, mimo że nie jest drużyną z tzw. “Power Conferences”, jednak widać dużą przepaść już między tą drużyną a drużynami z czołówki.
+
+## W ramach ciekawostki rozmieszczenie drużyn z naszego zbioru po USA
+
+```{r}
+#| label: mapka
+teams_unique <- data %>%
+  distinct(TEAM) 
+
+data_geo <- data %>%
+  distinct(TEAM) %>%
+  mutate(query = paste(TEAM, "University")) %>%
+  geocode(
+    address = query,
+    method = "google",
+    lat = latitude,
+    long = longitude
+  )
+
+data_test <- data %>%
+  left_join(data_geo, by = "TEAM")
+
+
+
+team_postseason <- data_test %>%
+  mutate(
+    made_postseason = !is.na(POSTSEASON) & POSTSEASON != "N/A"
+  ) %>%
+  group_by(TEAM) %>%
+  summarise(
+    postseason_appearances = sum(made_postseason),
+    longitude = first(longitude),
+    latitude  = first(latitude),
+    .groups = "drop"
+  )
+
+pal <- colorNumeric(
+  palette = viridisLite::viridis(256),
+  domain = team_postseason$postseason_appearances
+)
+
+
+
+leaflet(
+  team_postseason,
+  options = leafletOptions(
+    minZoom = 4,
+    maxZoom = 12
+  )
+) %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  
+  fitBounds(-125, 24, -66, 50) %>%
+  setMaxBounds(-125, 24, -66, 50) %>%
+  
+  addCircleMarkers(
+    lng = ~longitude,
+    lat = ~latitude,
+    radius = ~pmax(4, sqrt(postseason_appearances) * 2),
+    stroke = FALSE,
+    fillOpacity = 0.85,
+    color = ~pal(postseason_appearances),
+    popup = ~paste0(
+      "<b>", TEAM, "</b><br>",
+      "Ile razy drużyna dotarła do playoffów: ", postseason_appearances
+    )
+  ) %>%
+  
+  addLegend(
+    "bottomright",
+    pal = pal,
+    values = rev(team_postseason$postseason_appearances),
+    title = "Ile razy poszczególne drużyny grały w March Madness",
+    opacity = 1
+  )
+
+```
+
+# Zakończenie i wnioski
+
+Analiza statystyk NCAA pozwoliła zidentyfikować kilka wniosków:
+
+1. Efektywność ofensywna jest najważniejszym predyktorem zwycięstw.
+ADJOE wykazuje najsilniejszą korelację z liczbą wygranych, co potwierdza intuicję: drużyny grające skutecznie w ataku częściej odnoszą sukcesy.
+
+2. Skuteczność rzutów za 2 punkty ma większe znaczenie niż skuteczność za 3.
+Współczesna koszykówka często podkreśla rolę trójek, jednak dane NCAA pokazują, że stabilna i wysoka skuteczność z półdystansu i spod kosza jest bardziej powiązana z wygrywaniem.
+
+3. Niewielka ilość programów jest w stanie utrzymywać się w czołówce i rok w rok zajmować dobrą pozycję końcową w turnieju March Madness. Podkreśla to jak wyrównana jest liga D1 oraz "wyższość" najlepszych programów nad innymi.
+
+![Radość z koszykówki :)](https://e0.365dm.com/20/03/768x432/skysports-nba-stephen-curry_4939594.jpg?20200306154232)
+
+Koszykówka to sport liczb, ale wygrywają ci, którzy potrafią nadać tym liczbom rytm. Statystyki pokazują nam wzorce, lecz dopiero na parkiecie widać, jak zamieniają się w energię, decyzje i charakter. Właśnie dlatego analiza danych pozwala zrozumieć grę — ale to pasja sprawia, że wciąż chcemy ją oglądać.
+

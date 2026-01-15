@@ -1,0 +1,21 @@
+@article{conte2016ncaa,
+  title={Performance profile of NCAA Division I men's basketball games and training sessions},
+  author={Conte, Daniele and Tessitore, Antonio and Smiley, Katie and Thomas, Cole and Favero, Terence G.},
+  journal={Biology of Sport},
+  volume={33},
+  number={2},
+  pages={189--194},
+  year={2016},
+  doi={10.5604/20831862.1200512}
+}
+
+@article{esteves2018travel,
+  title={The influence of travel on performance in the NBA},
+  author={Esteves, Pedro and Mikulic, Pavle and Sampaio, Jaime},
+  journal={Sports Medicine - Open},
+  volume={4},
+  number={1},
+  pages={1--7},
+  year={2018},
+  doi={10.1186/s40798-018-0169-8}
+}

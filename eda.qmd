@@ -1,37 +1,17 @@
 ---
 title: "Uncovering Patterns in NCAA Basketball Team Statistics"
-subtitle: "An Exploratory Analysis of Team Success and Failure (2013–2021)"
-author:
-  - name: Jakub Zoldak
-    affiliation: Lublin University of Technology
-    email: s104627@edu.pollub.pl
-date: "2025-09-09"
-format: 
-  html:
-    lang: en
-    self-contained: true
-    toc: false
-    theme: united
+author: "Jakub Zoldak"
+format: html
 editor: visual
-code-fold: true
-code-copy: hover
-editor_options: 
-  chunk_output_type: console
 ---
 
 ## Introduction
 
 The goal of this project is to explore the performance metrics of NCAA basketball teams from 2013 to 2021, as provided in the dataset from Kaggle. The dataset, contained in the `cbb.csv` file, includes key statistics such as wins (W), adjusted offensive efficiency (ADJOE), adjusted defensive efficiency (ADJDE), and postseason outcomes, among others, for multiple seasons (excluding 2020 due to COVID-19’s impact on postseason play).
 
-The goal of this exploratory analysis is threefold:
+Using tools available in RStudio, we will conduct a comprehensive exploratory data analysis to identify patterns distinguishing successful and underperforming teams, detect statistical anomalies (e.g., teams with extreme metrics), and examine trends across seasons. The insights gained may provide valuable guidance for sports analytics, team strategy optimization, or predictive modeling of tournament success.
 
-* Identify the statistical patterns that separate successful teams from underperforming ones.
-
-* Detect anomalies, such as programs with extreme statistical profiles.
-
-* Examine trends across seasons that may reflect changes in style of play or broader strategic evolutions.
-
-These insights can inform sports analysts, coaches, and data scientists, offering perspectives on team strategy optimization and the predictive modeling of tournament performance.
+I will be trying to find patterns, that might occur in winning/losing teams, detecting anomalies (teams that have absurdly high/low stats in certain cafeterias) and overall looking in depth at this dataset.
 
 I found my dataset on kaggle.com, you can also access it via this link:
 
@@ -42,17 +22,16 @@ I found my dataset on kaggle.com, you can also access it via this link:
 I downloaded the dataset as a compressed zip from kaggle and then extracted `cbb.csv` which contains combined data from all 11 seasons.
 
 ```{r}
-#| label: loading the data
-#| include: false
 data <- read.csv("cbb.csv")
 ```
 
-I then decided to load in all packages that I will use during this EDA.
+I then decided to load in all packages that I will use during this EDA. (For now just tidyverse)
 
 ```{r}
 #| label: packages
 #| message: false
 #| warning: false
+#| include: false
 library(tidyverse)
 library(gganimate)
 library(gifski)
@@ -68,7 +47,6 @@ A good practice is to start the analysis with basic descriptive statistics. This
 First, we will check whether our dataset is complete (i.e., contains no NA values) and whether the columns have the appropriate variable types.
 
 ```{r}
-#| label: checking data
 glimpse(data) # rough summary of the data
 colSums(is.na(data)) # cheking whether there are NA's in each column
 ```
@@ -82,41 +60,33 @@ In the columns `Postseason` and `Seed` we have `NA` values, let's see what that 
 Hmm but why does the number of `NA` values in the `POSTSEASON` column differ from the `SEED` column? Let's check that out!
 
 ```{r}
-#| label: NA analysis
 table_df_postseason <- as.data.frame(table(data['POSTSEASON'], useNA = "ifany" ))
+view(table_df_postseason)
+nrow(data['POSTSEASON'])
+sum(table_df_postseason$Freq)
 
-table_df_postseason
-
-if(nrow(data['POSTSEASON']) == sum(table_df_postseason$Freq)){
-  cat("The table has the same amount of values as rows in main dataframe \n")
-} ## checking whether the table has the correct amount of values
-
-table_df_seed <- as.data.frame(table(data['SEED'], useNA = "ifany"))
-
-table_df_seed
-
-if(nrow(data['SEED']) == sum(table_df_seed$Freq)){
-   cat("The table has the same amount of values as rows in main dataframe")
-} ## checking whether the table has the correct amount of values
+table_df_seed <- as.data.frame(table(data$SEED, useNA = "ifany"))
+view(table_df_seed)
+nrow(data['SEED'])
+sum(table_df_seed$Freq)
 
 ```
 
 Okay, so we have identified the problem, our data contains two `NA` values, one that is actually an `NA` and one that is a string `"N/A"`. To make life easier in this EDA we will replace all `NA` values with text `"N/A"` values
 
 ```{r}
-#| label: changing NA
 data <- data %>%
   mutate(POSTSEASON = replace_na(POSTSEASON, "N/A"),
          SEED = replace_na(SEED, "N/A"))
+table(data$SEED)
 table(data$POSTSEASON)
 ```
 
 Nice, we quickly took care of that problem.
 
-The `POSTSEASON` column could be numeric, to easier allow us to determine correlations, so we will add a new column for those values `POSTSEASON_NUM`.
+The POSTSEASON column could be numeric, to easier allow us to determine correlations, so we will add a new column for those values.
 
 ```{r}
-#| label: numeric postseason
 
 data <- data %>%
   mutate(POSTSEASON_NUM = case_when(
@@ -145,7 +115,6 @@ A correlation matrix is a table that displays the correlation coefficients betwe
 -   0 indicates no relationship.
 
 ```{r}
-#| label: correlation matrix
 data %>% 
   select_if(is.numeric) %>% 
   cor() %>% 
@@ -165,7 +134,6 @@ data %>%
 This correlation matrix is not really that readible, let's try to filter out the strong correlations only.
 
 ```{r}
-#| label: more detailed correlation matrix
 cor_mat <- cor(data %>% select_if(is.numeric))
 
 threshold <- 0.5
@@ -199,9 +167,6 @@ In our matrix of correlations, the value of correlation between `W` and `ADJOE` 
 Let's check whether that is the case
 
 ```{r}
-#| label: scatter plot
-#| message: false
-#| warning: false
 ggplot(data, aes(x = W, y = ADJOE, color = factor(POSTSEASON)))+
   geom_point(alpha = 0.6, size = 2)+
   geom_smooth(method = "lm", color = "red", se = T)+
@@ -214,7 +179,7 @@ ggplot(data, aes(x = W, y = ADJOE, color = factor(POSTSEASON)))+
   theme_classic()
 ```
 
-On the scatter plot, we can see that the correlation is consistent with the correlation matrix: the higher the `ADJOE`, the more wins a team tends to achieve. Additionally, in the upper-right part of the plot, we notice that many of the teams finishing in the top postseason stages are clustered together.
+On the scatter plot, we can see that the correlation is consistent with the correlation matrix: the higher the ADJOE, the more wins a team tends to achieve. Additionally, in the upper-right part of the plot, we notice that many of the teams finishing in the top postseason stages are clustered together.
 
 ### Correlation between number of games won `W` and `X2P_O` Two-Point Shooting Percentage
 
@@ -223,9 +188,6 @@ In our matrix of correlations, the value of correlation between `W` and `X2P_O` 
 Let's see if that is the case, here I took (50%) 2PT Shooting Percentage as a cutoff between good shooting and not. (Via <https://www.teamrankings.com/ncaa-basketball/stat/two-point-pct>)
 
 ```{r}
-#| label: gif 2pt
-#| message: false
-#| warning: false
 p <- ggplot(data, aes(x = W, y = X2P_O, color = factor(POSTSEASON))) +
   geom_point(alpha = 0.7, size = 2)+
   geom_hline(yintercept = 50, linetype = "dashed", color = "black", size = 1)+
@@ -241,7 +203,7 @@ p <- ggplot(data, aes(x = W, y = X2P_O, color = factor(POSTSEASON))) +
   ease_aes('linear')
 
 animate(p,fps = 5, nframes = 300, width = 800, height = 600,units = "px", res = 72, renderer = gifski_renderer())
-anim_save("wins_vs_ax2p_o.gif") # saving the gif in our computer
+anim_save("wins_vs_ax2p_o.gif")
 ```
 
 Looking at the teams that have the highest amount of wins each season, we can clearly see that they are above, (oscillating close to) the 50% line, which indicates that the correlation exists.
@@ -249,7 +211,6 @@ Looking at the teams that have the highest amount of wins each season, we can cl
 Furthermore let us look at them amount of teams (calculated relative to the amount of teams playing that year) that shot above that (50%) cutoff and as we can see, there was a continuous growth throughout 2015-2019, and even through 2021-2024. We can look at 2020 being an exception due to COVID-19. This suggests to us that teams now more then ever are focusing on their percentage.
 
 ```{r}
-#| label: 2pt plot
 
 
 # Calculate percentage of teams above 50% each year
@@ -283,7 +244,6 @@ In our matrix of correlations the value of correlation between games won `W` and
 Here I took (38%) 3PT Shooting Percentage as a cutoff between good shooting and not. (Via <https://www.teamrankings.com/ncaa-basketball/stat/three-point-pct>)
 
 ```{r}
-#| label: 3pt gif
 q <- ggplot(data, aes(x = W, y = X3P_O, color = factor(POSTSEASON))) +
   geom_point(alpha = 0.7, size = 2) +
   geom_hline(yintercept = 38, linetype = "dashed", color = "black", size = 1)+
@@ -305,12 +265,11 @@ anim_save("wins_vs_ax3p_o.gif")
 
 ```
 
-Taking a look at the data, shows us that not a lot of teams can be classified as an elite shooting team. This leads me to belive that there is no correlation between elite 3pt shooting teams and wins, at least at the college level. 
+Taking a look at the data, shows us that not a lot of teams can be classified as an elite shooting team. This leads me to belive that there is no correlation between elite 3pt shooting teams and wins, at least at the college level.
 
 Looking at the percent of teams that actually achieve that (38%) cutoff through the years, shows how hard it is to be an elite 3 pt shooting team, with less and less teams achieving that. It might also show that throughout the years, the defense has not allowed for such a volume of shots.
 
 ```{r}
-#| label: 3pt plot
 # Count teams above 38% by year
 # Calculate percentage of teams above 50% each year
 teams_above_50 <- data %>%
@@ -345,20 +304,17 @@ Let us take a look at some of the teams that have the highest win percentage.
 First lets calculate the Win percentage
 
 ```{r}
-#| label: win percentage math
 data <- data %>% 
   mutate(WIN_P = W/G)
 
-sort(data$WIN_P, decreasing = T) %>% 
-  head(10)
+view(sort(data$WIN_P, decreasing = T))
 ```
 
 Notice how some of the `WIN_P` are above 1. Let us just ignore those cases.
 
-Let us take a further look at the `WIN_P` column. 
+Let us take a further look at the `WIN_P` column.
 
 ```{r}
-#| label: more details win_p
 win_p_summary <- data %>%
   group_by(WIN_P) %>%
   summarise(n_teams = n(), .groups = "drop")
@@ -372,9 +328,6 @@ third_q <- 0.6500
 We make variables of the first and third quartile. Let us take a look at the distribution of teams among `WIN_P`
 
 ```{r}
-#| label: distribution of win_p
-#| message: false
-#| warning: false
 # Create plot
 ggplot(win_p_summary, aes(x = WIN_P, y = n_teams)) +
   geom_point(color = "#FF0066") +  # Use bars to show frequency
@@ -385,9 +338,9 @@ ggplot(win_p_summary, aes(x = WIN_P, y = n_teams)) +
   scale_x_continuous(limits = c(0, 1), breaks = seq(0, 1, by = 0.1))
 ```
 
-On the graph we also marked the first and third quartile. We  can notice a slight normal distibution, with slight deviations especially in the (0.7 - 0.8) range.
+On the graph we also marked the first and third quartile. We can notice a slight normal distibution, with slight deviations especially in the (0.7 - 0.8) range.
 
-Searching through the internet (mostly reddit) I came to the conclusion that a good college season win percentage is above 65%. This also correlates to our third quartile, which implies that the NCAA is a very close and high level league.
+Searching through the internet (mostly reddit) I came to the conclusion that a good college season win percentage is above 65%. This also corelates to our third quartile, which implies that the NCAA is a very close and high level league.
 
 Look at that, the 0.65 `WIN_P` is actually the 3rd quantile, which means that we were looking at 25% of all teams. This reflects well upon the NCAA suggesting that there is a high level of competition.
 
@@ -396,7 +349,6 @@ Look at that, the 0.65 `WIN_P` is actually the 3rd quantile, which means that we
 Let us now filter out those teams into a different table.
 
 ```{r}
-#| label: winning teams
 
 top_teams <- data %>% 
   filter( WIN_P >= 0.65) %>% 
@@ -452,7 +404,6 @@ Let us notice that throughout the years there has been a slight upwards tendency
 Let us now see what team was most commonly a good team.
 
 ```{r}
-#| label: teams reocurring
 team_counts_all <- data %>%
   group_by(TEAM) %>%
   summarise(count = n(), .groups = "drop")
@@ -478,12 +429,11 @@ ggplot(count_summary, aes(x = count, y = n_teams)) +
   scale_x_continuous(breaks = unique(count_summary$count))
 ```
 
-Looking at the top teams that achieve that (0.65) win percentage we can see how many times each program (team) appears throughout the years. Let's take a look at the teams that appeared the most.
+Looking at the top teams that achieve that 0.65 win percentage we can see how many times each program (team) appears throughout the years. Let's take a look at the teams that appeared the most.
 
-I have chosen the ten teams that appeared the most, also adding on their avg postseason ranking (The lower the ranking the better the programs results throughout the years).
+I have chosen the ten teams that appeared the most, also adding on their avg postseason ranking (The lower the ranking the better the programs results throught the years).
 
 ```{r}
-#| label: avg postseason bar
 
 ggplot(top_10_by_count, aes(x = reorder(TEAM, avg_postseason_finish, decreasing = TRUE), y = avg_postseason_finish, fill = avg_postseason_finish))+
   geom_col()+
@@ -504,21 +454,21 @@ Belmont on the other hand is a team that consistently has a good regular season,
 
 ## Analysis of losing teams
 
-Let's take a look at the lower ranked teams.
+Let's take a look at the lower ranked teams :).
 
 First of all let's look at our win percentage column that we made earlier.
 
 ```{r}
-#| label: summary
 summary(data$WIN_P)
 ```
 
-Let us presume that a bad season will be below the first quartile, so underneath (0.3871) `WIN_P`.
+Let us pressume that a bad seson will be below the first quartile, so underneath (0.3871) `WIN_P`.
 
 ```{r}
-#| label: bad team plot bar
 
-
+worst_teams <- data %>% 
+  filter( WIN_P <= 0.3871) %>% 
+  filter(WIN_P >= 0)
 
 plot_teams_below_039 <- function(data, y_offset = 0.5, bar_color = "#FF0066", covid_year = 2020, covid_color = "gray50") {
   worst_teams <- data %>%
@@ -527,7 +477,8 @@ plot_teams_below_039 <- function(data, y_offset = 0.5, bar_color = "#FF0066", co
     count_below_039 = sum(WIN_P <= 0.3971, na.rm = TRUE),
     .groups = "drop"
   ) 
-  
+
+
   if (!covid_year %in% worst_teams$YEAR) {
     worst_teams <- rbind(worst_teams, data.frame(YEAR = covid_year, count_below_039 = 0))
   }
@@ -551,7 +502,35 @@ plot_teams_below_039(data)
 
 ```
 
-Teams with win percentages below the first quartile (0.39) were categorized as underperformers. The number of such “struggling” programs has decreased slightly across the observed seasons, indicating a narrowing competitive gap in Division I basketball. This shift may reflect improved parity, better talent distribution, and rising program quality across conferences.
+We can notice a decrease in the amount of teams that are "bad".
+
+Let us see which team was consistently bad.
+
+```{r}
+team_counts_all <- data %>%
+  group_by(TEAM) %>%
+  summarise(count = n(), .groups = "drop")
+
+team_counts_worst <- worst_teams %>% 
+  group_by(TEAM) %>% 
+  summarise(count = n(),
+            avg_postseason_finish = mean(POSTSEASON_NUM, na.rm = TRUE))
+
+worst_10_by_count <- team_counts_worst %>% 
+  arrange(count) %>% 
+  head(10)
+
+count_summary_worst <- team_counts_worst %>%
+  group_by(count) %>%
+  summarise(n_teams = n(), .groups = "drop")
+
+ggplot(count_summary_worst, aes(x = count, y = n_teams)) +
+  geom_col(fill = "#FF0066") +
+  geom_text(aes(label = n_teams), vjust = -0.5, size = 3, color = "black") +  # Add text labels
+  theme_classic() +
+  labs(x = "Count (Number of Appearances)", y = "Number of Teams") +
+  scale_x_continuous(breaks = unique(count_summary$count))
+```
 
 ## Conclusion
 
@@ -559,9 +538,4 @@ Through this exploratory data analysis of NCAA basketball team statistics from 2
 
 In contrast, the correlation between wins and three-point shooting percentage (3P_O) was weaker (0.42), with few teams reaching the elite benchmark of 38%. The percentage of such high-accuracy three-point teams has declined sharply over the years, dropping from approximately 10-15% in the early 2010s to under 5% by 2024. This trend may be attributed to the NCAA's extension of the three-point line in the 2019-20 season, which coincided with the lowest Division I-wide three-point shooting average on record (33.47%), as well as evolving defensive schemes that limit long-range opportunities.
 
-Powerhouse programs repeatedly sustain both strong regular-season records and deep postseason runs, while others demonstrate regular-season strength without tournament validation. We look at teams like **Duke** or **Gonzaga**, that consistently achieve good results both in the regular season, and in the postseason, as powerhouses. Competitive balance is improving in the NCAA. The decline in the number of chronically underperforming teams hints at broader parity, making NCAA basketball one of the most competitive environments in the world.
-
 Overall, these findings underscore the evolving nature of NCAA basketball, offering actionable insights for coaches, analysts, and fans aiming to understand the drivers of success in a competitive landscape.
-
-
-![Jakub Zoldak](https://t3.ftcdn.net/jpg/03/12/44/34/360_F_312443448_uEfH6toGytMhyWpAtXeiB5bNLJ5SCSnx.jpg)
